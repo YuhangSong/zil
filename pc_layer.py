@@ -32,7 +32,7 @@ class PCLayer(nn.Module):
 
             If pc_layer.training: --> i.e., you just called pc_layer.train()
 
-                If pc_layer.get_is_sample_x(): --> i.e., you just called pc_layer.set_is_sample_x(True)
+                If pc_layer.is_sample_x: --> i.e., you just called pc_layer.is_sample_x=True
                     self.x will be sampled according to sample_x_fn.
                 Energy will be computed and held.
                 self.x will be returned instead of the input.
@@ -45,9 +45,9 @@ class PCLayer(nn.Module):
                     energy_fn = lambda inputs: 0.5 * (inputs['mu'] - inputs['x'].detach())**2
             sample_x_fn: The fn that specifies the how to sample x from mu. Sampling x only happens with you are
                     1, in training mode, and
-                    2, you have just called pc_layer.set_is_sample_x(True).
-                When both above conditions are satisfied, sample_x_fn will be used to sample x from mu, but just for one time, then self._is_sample_x is set to False again.
-                Normally, you should not care about controlling when to sample x from mu at this level, the PCLayer level (meaning you don't have to call pc_layer.set_is_sample_x(True) yourself), 
+                    2, you have just called pc_layer.is_sample_x=True.
+                When both above conditions are satisfied, sample_x_fn will be used to sample x from mu, but just for one time, then self.is_sample_x is set to False again.
+                Normally, you should not care about controlling when to sample x from mu at this level, the PCLayer level (meaning you don't have to call pc_layer.is_sample_x=True yourself), 
                     because PCTrainer has handled this, see arugments <is_sample_x_at_epoch_start> of PCTrainer.train_on_batch().
                 For example:
                     If sample_x_fn = lambda inputs: inputs['mu']
@@ -97,7 +97,7 @@ class PCLayer(nn.Module):
             self.clear_energy_per_datapoint()
 
         # create all required parameters and buffers
-        self._is_sample_x = False
+        self.is_sample_x = False
         self.x = None
 
         # initially, we set the module in evaluation mode
@@ -115,19 +115,6 @@ class PCLayer(nn.Module):
             assert isinstance(S, torch.Tensor)
             assert S.dim() == 2
         self._S = S
-
-    def get_is_sample_x(self) -> bool:
-        """
-        """
-
-        return self._is_sample_x
-
-    def set_is_sample_x(self, is_sample_x: bool) -> None:
-        """
-        """
-
-        assert isinstance(is_sample_x, bool)
-        self._is_sample_x = is_sample_x
 
     #  METHODS  ##############################################################################################################
 
@@ -167,43 +154,43 @@ class PCLayer(nn.Module):
         if self.training:
 
             # detect cases where sample_x is necessary
-            if not self._is_sample_x:
+            if not self.is_sample_x:
 
                 # case: no initialization
                 if self.x is None:
 
                     warnings.warn(
                         (
-                            "The <self.x> has not been initialized yet, run with <pc_layer.set_is_sample_x(True)> first. We will do it for you."
+                            "The <self.x> has not been initialized yet, run with <pc_layer.is_sample_x=True> first. We will do it for you."
                         ),
                         category=RuntimeWarning
                     )
-                    self._is_sample_x = True
+                    self.is_sample_x = True
 
                 # case: device changed
                 elif mu.device != self.x.device:
                     warnings.warn(
                         (
-                            "The device of <self.x> is not consistent with that of <mu>, run with <pc_layer.set_is_sample_x(True)> first. We will do it for you."
+                            "The device of <self.x> is not consistent with that of <mu>, run with <pc_layer.is_sample_x=True> first. We will do it for you."
                         ),
                         category=RuntimeWarning
                     )
-                    self._is_sample_x = True
+                    self.is_sample_x = True
 
                 # case: size changed
                 elif mu.size() != self.x.size():
                     warnings.warn(
                         (
-                            "You have changed the shape of this layer, you should do <pc_layer.set_is_sample_x(True) when changing the shape of this layer. We will do it for you.\n"
+                            "You have changed the shape of this layer, you should do <pc_layer.is_sample_x=True when changing the shape of this layer. We will do it for you.\n"
                             "This should have been taken care of by <pc_trainer> unless you have set <is_sample_x_at_epoch_start=False> when calling <pc_trainer.train_on_batch()>,\n"
                             "in which case you should be responsible for making sure the batch size stays still."
                         ),
                         category=RuntimeWarning
                     )
-                    self._is_sample_x = True
+                    self.is_sample_x = True
 
             # sample_x
-            if self._is_sample_x:
+            if self.is_sample_x:
 
                 x_data = self._sample_x_fn(
                     {
@@ -214,8 +201,8 @@ class PCLayer(nn.Module):
 
                 self.x = nn.Parameter(x_data.to(mu.device), True)
 
-                # _is_sample_x only takes effect for one pass
-                self._is_sample_x = False
+                # is_sample_x only takes effect for one pass
+                self.is_sample_x = False
 
             x = self.x
 
